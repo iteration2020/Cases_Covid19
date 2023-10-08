@@ -10,7 +10,7 @@ import regression_new
 
 if __name__ == '__main__':
     if runtime.exists():
-        regression_new()
+        regression_new.mainmenu()
     else:
         sys.argv = ["streamlit", "run", sys.argv[0]]
         sys.exit(stcli.main())
