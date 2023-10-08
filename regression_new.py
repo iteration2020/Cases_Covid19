@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 from matplotlib import pyplot as plt
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, RandomizedSearchCV
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.svm import SVR
 from sqlalchemy import create_engine, MetaData, Table
@@ -40,8 +40,14 @@ Deaths = Deaths_DF.loc[:,deaths_cols[4]:]
 num_dates = len(Confirmed.keys())
 ck = Confirmed.keys()
 dk = Deaths.keys()
-world_cases =
-total_deaths =
+world_cases = []
+total_deaths = []
+
+for i in range(num_dates):
+    confirmed_sum = Confirmed[ck[i]].sum()
+    death_sum = Deaths[dk[i]].sum()
+    world_cases.append(confirmed_sum)
+    total_deaths.append(death_sum)
 
 def daily_increase(data):
     d = []
@@ -60,6 +66,7 @@ def moving_average(data, window_size):
         else:
             moving_average.append(np.mean(data[i:len(data)]))
     return moving_average
+
 
 window = 7
 
@@ -91,19 +98,15 @@ def mainmenu():
     elif choice == "Визуалиация и аналитика":
         st.write("Вы выбрали Пункт 2")
     elif choice == "Обучение модели":
-        days_to_skip = st.number_input("Количество дней для пропуска?")
-        learning()
+        days_to_skip = st.number_input("Количество дней для пропуска?", value=1, format="%d")
+        dg = st.number_input("Степень полинома?", value=3, format="%d")
+        if st.button("Обучение модели", type="primary"):
+            learning(days_to_skip,world_cases,total_deaths,dg)
     elif choice == "О проекте":
         st.write("Вы выбрали Пункт 4")
 
 # Обучение модели методом Полиноминальной регрессии
-def learning():
-    for i in range(num_dates):
-        confirmed_sum = Confirmed[ck[i]].sum()
-        death_sum = Deaths[dk[i]].sum()
-        world_cases.append(confirmed_sum)
-        total_deaths.append(death_sum)
-        mortality_rate.append(death_sum / confirmed_sum)
+def learning(days_to_skip,world_cases,total_deaths,dg):
     days_since_1_22 = np.array([i for i in range(len(ck))]).reshape(-1, 1)
     world_cases = np.array(world_cases).reshape(-1, 1)
     total_deaths = np.array(total_deaths).reshape(-1, 1)
@@ -112,7 +115,7 @@ def learning():
     days_in_future = 10
     future_forcast = np.array([i for i in range(len(ck) + days_in_future)]).reshape(-1, 1)
     adjusted_dates = future_forcast[:-10]
-    poly = PolynomialFeatures(degree=3)
+    poly = PolynomialFeatures(degree=dg)
     poly_X_train_confirmed = poly.fit_transform(X_train_confirmed)
     poly_X_test_confirmed = poly.fit_transform(X_test_confirmed)
     poly_future_forcast = poly.fit_transform(future_forcast)
@@ -126,8 +129,33 @@ def learning():
     plt.plot(y_test_confirmed)
     plt.plot(test_linear_pred)
     plt.legend(['Test Data', 'Polynomial Regression Predictions'])
+    st.set_option('deprecation.showPyplotGlobalUse', False)
     st.pyplot()
     mae = mean_absolute_error(test_linear_pred, y_test_confirmed)
     mse = mean_squared_error(test_linear_pred, y_test_confirmed)
     st.write('MAE:', mae)
     st.write('MSE:', mse)
+    bayesian_poly = PolynomialFeatures(degree=3)
+    bayesian_poly_X_train_confirmed = bayesian_poly.fit_transform(X_train_confirmed)
+    bayesian_poly_X_test_confirmed = bayesian_poly.fit_transform(X_test_confirmed)
+    bayesian_poly_future_forcast = bayesian_poly.fit_transform(future_forcast)
+    tol = [1e-6, 1e-5, 1e-4, 1e-3, 1e-2]
+    alpha_1 = [1e-7, 1e-6, 1e-5, 1e-4, 1e-3]
+    alpha_2 = [1e-7, 1e-6, 1e-5, 1e-4, 1e-3]
+    lambda_1 = [1e-7, 1e-6, 1e-5, 1e-4, 1e-3]
+    lambda_2 = [1e-7, 1e-6, 1e-5, 1e-4, 1e-3]
+    bayesian_grid = {'tol': tol, 'alpha_1': alpha_1, 'alpha_2': alpha_2, 'lambda_1': lambda_1, 'lambda_2': lambda_2}
+    bayesian = BayesianRidge(fit_intercept=False)
+    bayesian_search = RandomizedSearchCV(bayesian, bayesian_grid, scoring='neg_mean_squared_error', cv=3,
+                                         return_train_score=True, n_jobs=-1, n_iter=40, verbose=1)
+    bayesian_search.fit(bayesian_poly_X_train_confirmed, y_train_confirmed)
+    bayesian_confirmed = bayesian_search.best_estimator_
+    test_bayesian_pred = bayesian_confirmed.predict(bayesian_poly_X_test_confirmed)
+    bayesian_pred = bayesian_confirmed.predict(bayesian_poly_future_forcast)
+    print('MAE:', mean_absolute_error(test_bayesian_pred, y_test_confirmed))
+    print('MSE:', mean_squared_error(test_bayesian_pred, y_test_confirmed))
+    plt.plot(y_test_confirmed)
+    plt.plot(test_bayesian_pred)
+    plt.legend(['Test Data', 'Bayesian Ridge Polynomial Predictions'])
+    st.set_option('deprecation.showPyplotGlobalUse', False)
+    st.pyplot()
