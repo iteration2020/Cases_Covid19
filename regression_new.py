@@ -83,7 +83,7 @@ world_daily_death_avg = moving_average(world_daily_death, window)
 def mainmenu():
     st.sidebar.title("Меню")
 
-    menu_options = ["Исходные данные", "Визуалиация и аналитика", "Обучение модели", "О проекте"]
+    menu_options = ["Исходные данные", "Визуалиация и аналитика", "Обучение модели"]
     choice = st.sidebar.selectbox("Выберите пункт меню", menu_options)
     if choice == "Исходные данные":
         view = st.sidebar.selectbox('Выберите таблицу',['confirmed_global','death_global','report_latest','report_us'])
@@ -102,8 +102,6 @@ def mainmenu():
         dg = st.number_input("Степень полинома?", value=3, format="%d")
         if st.button("Обучение модели", type="primary"):
             learning(days_to_skip,world_cases,total_deaths,dg)
-    elif choice == "О проекте":
-        st.write("Вы выбрали Пункт 4")
 
 # Обучение модели методом Полиноминальной регрессии
 def learning(days_to_skip,world_cases,total_deaths,dg):
